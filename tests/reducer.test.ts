@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BOARD } from "@/game/board";
+import { movementPath } from "@/game/movement";
 import { createGame, reducer, rentFor, type GameState } from "@/game/reducer";
 
 const roll = (s: GameState, a: number, b: number, cardIndex = 0) =>
@@ -152,5 +153,33 @@ describe("bangkrut dan pemenang", () => {
     g = roll(g, 1, 3); // petak 4 (pajak)
     g = reducer(g, { type: "END_TURN" });
     expect(g.current).toBe(2);
+  });
+});
+
+describe("jalur animasi pion", () => {
+  const path = (s: GameState, a: number, b: number) =>
+    movementPath(s, roll(s, a, b), [a, b]);
+
+  it("melewati tiap petak, termasuk memutar lewat START", () => {
+    expect(path(fresh(), 1, 2)).toEqual([1, 2, 3]);
+    const g = fresh();
+    g.players[0].position = 38;
+    expect(path(g, 2, 3)).toEqual([39, 0, 1, 2, 3]);
+  });
+
+  it("tetap sampai petak Masuk Penjara sebelum melompat ke penjara", () => {
+    const g = fresh();
+    g.players[0].position = 27;
+    expect(path(g, 1, 2).at(-1)).toBe(30);
+  });
+
+  it("kosong bila tetap di penjara atau kembar tiga kali", () => {
+    const g = fresh();
+    g.players[0].inJail = true;
+    g.players[0].position = 10;
+    expect(path(g, 1, 2)).toEqual([]);
+    const h = fresh();
+    h.doublesCount = 2;
+    expect(path(h, 3, 3)).toEqual([]);
   });
 });

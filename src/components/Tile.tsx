@@ -12,50 +12,71 @@ const ICONS: Partial<Record<TileData["type"], string>> = {
   tax: "💸",
 };
 
+type Side = "bottom" | "left" | "top" | "right" | "corner";
+
+function sideOf(row: number, col: number): Side {
+  if ((row === 0 || row === 10) && (col === 0 || col === 10)) return "corner";
+  if (row === 10) return "bottom";
+  if (col === 0) return "left";
+  if (row === 0) return "top";
+  return "right";
+}
+
+// Pita warna ada di sisi yang menghadap ke tengah papan; penanda pemilik di sisi luar.
+const LAYOUT: Record<Side, { flex: string; band: string; owner: string }> = {
+  bottom: { flex: "flex-col", band: "h-[24%] w-full", owner: "bottom-0 left-0 h-[9%] w-full" },
+  top: { flex: "flex-col-reverse", band: "h-[24%] w-full", owner: "top-0 left-0 h-[9%] w-full" },
+  left: { flex: "flex-row-reverse", band: "w-[24%] h-full", owner: "left-0 top-0 w-[9%] h-full" },
+  right: { flex: "flex-row", band: "w-[24%] h-full", owner: "right-0 top-0 w-[9%] h-full" },
+  corner: { flex: "flex-col", band: "", owner: "" },
+};
+
 export default function Tile({
   tile,
   row,
   col,
   owner,
-  players,
   active,
 }: {
   tile: TileData;
   row: number;
   col: number;
   owner?: Player;
-  players: Player[];
   active: boolean;
 }) {
-  const corner = (row === 0 || row === 10) && (col === 0 || col === 10);
+  const side = sideOf(row, col);
+  const layout = LAYOUT[side];
   const price = "price" in tile ? tile.price : "amount" in tile ? tile.amount : null;
+  const corner = side === "corner";
   return (
     <div
       style={{ gridRow: row + 1, gridColumn: col + 1 }}
-      className={`relative flex min-w-0 flex-col overflow-hidden border border-slate-700 bg-slate-100 text-slate-900 ${
-        active ? "z-10 ring-2 ring-white" : ""
-      } ${corner ? "bg-slate-200" : ""}`}
+      className={`tile-bg relative flex min-w-0 border border-emerald-900/40 text-emerald-950 ${layout.flex} ${
+        active ? "tile-active z-10" : ""
+      }`}
     >
       {tile.type === "property" && (
-        <div className="h-[18%] shrink-0" style={{ background: GROUP_COLORS[tile.group] }} />
+        <div className={`shrink-0 border-emerald-900/40 ${layout.band}`} style={{ background: GROUP_COLORS[tile.group] }} />
       )}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-px text-center leading-tight">
-        {ICONS[tile.type] && <span className="text-[10px] sm:text-sm">{ICONS[tile.type]}</span>}
-        <span className="w-full break-words text-[6px] font-semibold sm:text-[9px]">{tile.name}</span>
-        {price !== null && <span className="text-[6px] text-slate-600 sm:text-[8px]">{price}</span>}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center px-px text-center leading-[1.05]">
+        {ICONS[tile.type] && (
+          <span className={corner ? "text-lg sm:text-3xl" : "text-[10px] sm:text-base"}>{ICONS[tile.type]}</span>
+        )}
+        <span
+          className={`w-full break-words font-bold ${
+            corner ? "text-[7px] sm:text-xs" : "text-[6px] sm:text-[9px] lg:text-[10px]"
+          }`}
+        >
+          {tile.name}
+        </span>
+        {price !== null && <span className="text-[6px] opacity-70 sm:text-[9px]">{price}</span>}
       </div>
-      {owner && <div className="h-[8%] shrink-0" style={{ background: owner.color }} title={`Milik ${owner.name}`} />}
-      {players.length > 0 && (
-        <div className="absolute inset-x-0 bottom-[10%] flex flex-wrap justify-center gap-px">
-          {players.map((p) => (
-            <span
-              key={p.id}
-              title={p.name}
-              className="h-2 w-2 rounded-full border border-white shadow sm:h-3 sm:w-3"
-              style={{ background: p.color }}
-            />
-          ))}
-        </div>
+      {owner && (
+        <div
+          className={`absolute ${layout.owner}`}
+          style={{ background: owner.color, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.25)" }}
+          title={`Milik ${owner.name}`}
+        />
       )}
     </div>
   );

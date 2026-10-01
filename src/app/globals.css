@@ -1,6 +1,100 @@
 @import "tailwindcss";
 
 body {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: #d9d6d2;
+  color: #1e293b;
+}
+
+/* Meja marmer */
+.table-bg {
+  background:
+    linear-gradient(115deg, transparent 40%, rgba(120, 120, 130, 0.12) 41%, transparent 43%),
+    linear-gradient(62deg, transparent 60%, rgba(120, 120, 130, 0.1) 61%, transparent 63%),
+    radial-gradient(ellipse at 50% 25%, #f4f2ef 0%, #d6d2cd 55%, #a9a5a0 100%);
+}
+
+/* Papan miring 3D */
+.scene {
+  --tilt: 24deg;
+  perspective: 1700px;
+  perspective-origin: 50% 20%;
+}
+@media (min-width: 1024px) {
+  .scene {
+    --tilt: 36deg;
+  }
+}
+.plane {
+  transform: rotateX(var(--tilt));
+  transform-origin: 50% 60%;
+  transform-style: preserve-3d;
+}
+.preserve3d {
+  transform-style: preserve-3d;
+}
+
+.frame {
+  background: linear-gradient(135deg, #a3733f, #6d4524 55%, #4a2d16);
+  box-shadow:
+    0 16px 0 -2px #3a2312,
+    0 44px 60px -8px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+  transform-style: preserve-3d;
+}
+.corner {
+  position: absolute;
+  width: 6%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #eef0f3, #7b8494);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.center-bg {
+  background: radial-gradient(circle at 50% 40%, #e8dabc 0%, #d2bd94 100%);
+  box-shadow: inset 0 0 0 3px #b79c68, inset 0 0 30px rgba(90, 60, 20, 0.35);
+}
+
+.tile-bg {
+  background: linear-gradient(160deg, #e6efdc, #cfdcc2);
+}
+
+/* Pion melompat tiap berpindah petak */
+@keyframes hop {
+  0% { transform: translateY(0); }
+  45% { transform: translateY(-55%); }
+  100% { transform: translateY(0); }
+}
+.hop {
+  animation: hop var(--hop-ms, 240ms) ease-out;
+}
+
+@keyframes pawn-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8%); }
+}
+.pawn-active {
+  animation: pawn-idle 1.2s ease-in-out infinite;
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.0), inset 0 0 0 2px rgba(255, 255, 255, 0.9); }
+  50% { box-shadow: 0 0 14px 2px rgba(255, 255, 255, 0.9), inset 0 0 0 2px rgba(255, 255, 255, 0.9); }
+}
+.tile-active {
+  animation: glow 1.4s ease-in-out infinite;
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+.pop-in {
+  animation: pop-in 0.3s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pawn-active, .tile-active {
+    animation: none;
+  }
 }
