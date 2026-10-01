@@ -29,7 +29,8 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
   // Posisi pion sementara selama animasi berjalan (pemain -> petak).
   const [moving, setMoving] = useState<Record<number, number>>({});
   const [tm] = useState(timing);
-  const [building, setBuilding] = useState(false);
+  // Panel bangun; boughtTile terisi saat dibuka otomatis setelah membeli tanah.
+  const [building, setBuilding] = useState<{ boughtTile?: number } | null>(null);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -85,7 +86,7 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
           <PlayerPanel state={state} />
           {!winner && (state.phase === "roll" || state.phase === "end") && (
             <button
-              onClick={() => setBuilding(true)}
+              onClick={() => setBuilding({})}
               disabled={busy}
               className="mt-3 w-full rounded-full border-2 border-white/70 bg-gradient-to-b from-emerald-500 to-emerald-700 py-2 text-sm font-bold text-white shadow-lg disabled:opacity-40"
             >
@@ -114,7 +115,10 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
                 state={state}
                 busy={busy}
                 onRoll={roll}
-                onBuy={() => act({ type: "BUY" })}
+                onBuy={() => {
+                  act({ type: "BUY" });
+                  setBuilding({ boughtTile: current.position });
+                }}
                 onDecline={() => act({ type: "DECLINE" })}
                 onEndTurn={() => act({ type: "END_TURN" })}
                 onPayJail={() => act({ type: "PAY_JAIL" })}
@@ -133,7 +137,14 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
           </button>
         </aside>
       </div>
-      {building && !winner && <BuildPanel state={state} onAction={act} onClose={() => setBuilding(false)} />}
+      {building && !winner && (
+        <BuildPanel
+          state={state}
+          onAction={act}
+          onClose={() => setBuilding(null)}
+          boughtTile={building.boughtTile}
+        />
+      )}
     </main>
   );
 }

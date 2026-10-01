@@ -9,13 +9,20 @@ export default function BuildPanel({
   state,
   onAction,
   onClose,
+  boughtTile,
 }: {
   state: GameState;
   onAction: (a: Action) => void;
   onClose: () => void;
+  /** Petak yang baru saja dibeli; bila ada, panel dibuka dengan sambutan pembelian. */
+  boughtTile?: number;
 }) {
   const player = state.players[state.current];
   const sets = GROUPS.filter((g) => ownsFullGroup(state, player.id, tilesInGroup(g)[0]));
+  const partial = GROUPS.filter((g) => {
+    if (sets.includes(g)) return false;
+    return tilesInGroup(g).some((t) => state.owners[t] === player.id);
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3" onClick={onClose}>
@@ -24,12 +31,17 @@ export default function BuildPanel({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-extrabold">Bangun rumah &amp; hotel</h2>
+          <h2 className="text-lg font-extrabold">
+            {boughtTile !== undefined ? `${BOARD[boughtTile].name} dibeli! 🎉` : "Bangun rumah & hotel"}
+          </h2>
           <span className="font-semibold tabular-nums">Rp {player.money.toLocaleString("id-ID")}</span>
         </div>
+        {boughtTile !== undefined && sets.length > 0 && (
+          <p className="mb-3 text-sm text-slate-600">Mau langsung membangun rumah atau hotel? Pilih di bawah, atau lewati.</p>
+        )}
         {sets.length === 0 ? (
           <p className="text-sm text-slate-600">
-            Kamu belum memiliki satu grup warna penuh. Kumpulkan semua petak dalam satu warna untuk mulai membangun.
+            Belum ada kelompok warna yang lengkap, jadi belum bisa membangun. Kumpulkan semua petak dalam satu warna.
           </p>
         ) : (
           <div className="space-y-4">
@@ -71,9 +83,29 @@ export default function BuildPanel({
             ))}
           </div>
         )}
+        {partial.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">Progres kelompok warna</p>
+            <div className="space-y-1">
+              {partial.map((g) => {
+                const all = tilesInGroup(g);
+                const mine = all.filter((t) => state.owners[t] === player.id).length;
+                return (
+                  <div key={g} className="flex items-center gap-2 text-sm">
+                    <span className="h-3 w-5 rounded-sm border border-black/20" style={{ background: GROUP_COLORS[g] }} />
+                    <span className="flex-1 truncate text-slate-600">{all.map((t) => BOARD[t].name).join(", ")}</span>
+                    <span className="font-semibold tabular-nums">
+                      {mine}/{all.length}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <p className="mt-3 text-xs text-slate-500">Bangun merata di tiap grup; jual bangunan mengembalikan setengah harga.</p>
         <button onClick={onClose} className="mt-3 w-full rounded-full bg-slate-700 py-2 font-bold text-white">
-          Tutup
+          {boughtTile !== undefined ? "Lanjut" : "Tutup"}
         </button>
       </div>
     </div>
