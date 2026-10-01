@@ -37,9 +37,11 @@ export default function PlayerPanel({ state }: { state: GameState }) {
                   <span
                     key={t}
                     title={tile.name}
-                    className="h-3 w-4 rounded-sm border border-white/70 shadow-sm sm:h-3.5 sm:w-5"
+                    className="flex h-3 w-4 items-center justify-center rounded-sm border border-white/70 text-[8px] font-bold leading-none text-slate-900 shadow-sm sm:h-3.5 sm:w-5"
                     style={{ background: color }}
-                  />
+                  >
+                    {state.houses[t] ? (state.houses[t] === 5 ? "H" : state.houses[t]) : ""}
+                  </span>
                 );
               })}
             </div>

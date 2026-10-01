@@ -183,3 +183,73 @@ describe("jalur animasi pion", () => {
     expect(path(h, 3, 3)).toEqual([]);
   });
 });
+
+describe("rumah dan hotel", () => {
+  const withBrown = () => {
+    const g = fresh();
+    g.owners[1] = 0;
+    g.owners[3] = 0;
+    return g;
+  };
+
+  it("tidak bisa membangun tanpa memiliki satu grup penuh", () => {
+    const g = fresh();
+    g.owners[1] = 0;
+    expect(reducer(g, { type: "BUILD", tile: 1 })).toBe(g);
+  });
+
+  it("membangun merata, memotong uang, dan menaikkan sewa", () => {
+    let g = withBrown();
+    g = reducer(g, { type: "BUILD", tile: 1 });
+    expect(g.houses[1]).toBe(1);
+    expect(g.players[0].money).toBe(1450);
+    expect(reducer(g, { type: "BUILD", tile: 1 })).toBe(g); // harus merata dulu
+    g = reducer(g, { type: "BUILD", tile: 3 });
+    g = reducer(g, { type: "BUILD", tile: 1 });
+    expect(g.houses[1]).toBe(2);
+    expect(rentFor(g, 1, 0)).toBe(30);
+    expect(rentFor(g, 3, 0)).toBe(20);
+  });
+
+  it("maksimal hotel dan sewanya", () => {
+    let g = withBrown();
+    for (let i = 0; i < 5; i++) {
+      g = reducer(g, { type: "BUILD", tile: 1 });
+      g = reducer(g, { type: "BUILD", tile: 3 });
+    }
+    expect(g.houses[1]).toBe(5);
+    expect(reducer(g, { type: "BUILD", tile: 1 })).toBe(g);
+    expect(rentFor(g, 1, 0)).toBe(250);
+  });
+
+  it("menjual mengembalikan setengah harga", () => {
+    let g = withBrown();
+    g = reducer(g, { type: "BUILD", tile: 1 });
+    g = reducer(g, { type: "SELL", tile: 1 });
+    expect(g.houses[1]).toBeUndefined();
+    expect(g.players[0].money).toBe(1475);
+  });
+
+  it("tidak bisa membangun saat bukan fase roll/end atau uang kurang", () => {
+    const g = withBrown();
+    g.phase = "buy";
+    expect(reducer(g, { type: "BUILD", tile: 1 })).toBe(g);
+    const h = withBrown();
+    h.players[0].money = 40;
+    expect(reducer(h, { type: "BUILD", tile: 1 })).toBe(h);
+  });
+
+  it("bangunan hilang saat pemilik bangkrut, tanah pindah ke kreditor", () => {
+    const g = createGame(["A", "B"]);
+    g.owners[1] = 0;
+    g.owners[3] = 0;
+    g.owners[6] = 1;
+    g.houses[1] = 2;
+    g.players[0].position = 3;
+    g.players[0].money = 1;
+    const s = roll(g, 1, 2); // A mendarat di Medan milik B, sewa 6, bangkrut
+    expect(s.players[0].bankrupt).toBe(true);
+    expect(s.owners[1]).toBe(1);
+    expect(s.houses[1]).toBeUndefined();
+  });
+});

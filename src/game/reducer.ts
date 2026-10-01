@@ -3,8 +3,10 @@ import {
   BOARD_SIZE,
   CARDS,
   GO_SALARY,
+  HOUSE_COST,
   JAIL_FINE,
   JAIL_POSITION,
+  MAX_HOUSES,
   START_MONEY,
   isBuyable,
   tilesInGroup,
@@ -34,6 +36,8 @@ export type GameState = {
   doublesCount: number;
   /** tileIndex -> playerId */
   owners: Record<number, number>;
+  /** tileIndex -> jumlah rumah (1-4), 5 = hotel */
+  houses: Record<number, number>;
   log: string[];
   winner: number | null;
 };
@@ -43,7 +47,9 @@ export type Action =
   | { type: "BUY" }
   | { type: "DECLINE" }
   | { type: "END_TURN" }
-  | { type: "PAY_JAIL" };
+  | { type: "PAY_JAIL" }
+  | { type: "BUILD"; tile: number }
+  | { type: "SELL"; tile: number };
 
 export function createGame(names: string[]): GameState {
   const players = names.map<Player>((name, id) => ({
@@ -64,6 +70,7 @@ export function createGame(names: string[]): GameState {
     rolledDoubles: false,
     doublesCount: 0,
     owners: {},
+    houses: {},
     log: [`Game dimulai. Giliran ${players[0].name}.`],
     winner: null,
   };
@@ -87,6 +94,8 @@ export function rentFor(state: GameState, tileIndex: number, diceTotal: number):
   if (owner === undefined) return 0;
   switch (tile.type) {
     case "property": {
+      const built = state.houses[tileIndex] ?? 0;
+      if (built > 0) return tile.rents[built];
       const monopoly = countOwned(state, owner, tilesInGroup(tile.group)) === tilesInGroup(tile.group).length;
       return monopoly ? tile.rent * 2 : tile.rent;
     }
@@ -124,6 +133,7 @@ function declareBankrupt(s: GameState, p: Player, creditorId: number | null) {
   if (creditorId !== null) s.players[creditorId].money += p.money;
   p.money = 0;
   for (const tile of ownedTiles(s, p.id)) {
+    delete s.houses[tile]; // bangunan dikembalikan ke bank
     if (creditorId === null) delete s.owners[tile];
     else s.owners[tile] = creditorId;
   }
@@ -205,6 +215,52 @@ function nextPlayer(s: GameState) {
     i = (i + 1) % s.players.length;
   } while (s.players[i].bankrupt);
   s.current = i;
+}
+
+export function houseCost(tileIndex: number): number {
+  const tile = BOARD[tileIndex];
+  return tile.type === "property" ? HOUSE_COST[tile.group] : 0;
+}
+
+function groupHouseCounts(state: GameState, tileIndex: number): number[] {
+  const tile = BOARD[tileIndex];
+  if (tile.type !== "property") return [];
+  return tilesInGroup(tile.group).map((t) => state.houses[t] ?? 0);
+}
+
+/** Pemain aktif memiliki seluruh grup warna petak ini? */
+export function ownsFullGroup(state: GameState, playerId: number, tileIndex: number): boolean {
+  const tile = BOARD[tileIndex];
+  return tile.type === "property" && tilesInGroup(tile.group).every((t) => state.owners[t] === playerId);
+}
+
+function canActNow(state: GameState): boolean {
+  return state.phase === "roll" || state.phase === "end";
+}
+
+export function canBuild(state: GameState, tileIndex: number): boolean {
+  const p = state.players[state.current];
+  const built = state.houses[tileIndex] ?? 0;
+  return (
+    canActNow(state) &&
+    BOARD[tileIndex].type === "property" &&
+    state.owners[tileIndex] === p.id &&
+    ownsFullGroup(state, p.id, tileIndex) &&
+    built < MAX_HOUSES &&
+    built === Math.min(...groupHouseCounts(state, tileIndex)) && // membangun merata
+    p.money >= houseCost(tileIndex)
+  );
+}
+
+export function canSell(state: GameState, tileIndex: number): boolean {
+  const p = state.players[state.current];
+  const built = state.houses[tileIndex] ?? 0;
+  return (
+    canActNow(state) &&
+    state.owners[tileIndex] === p.id &&
+    built > 0 &&
+    built === Math.max(...groupHouseCounts(state, tileIndex)) // menjual merata
+  );
 }
 
 export function reducer(state: GameState, action: Action): GameState {
@@ -289,6 +345,26 @@ export function reducer(state: GameState, action: Action): GameState {
       p.inJail = false;
       p.jailTurns = 0;
       log(s, `${p.name} membayar denda ${money(JAIL_FINE)} dan keluar dari Penjara.`);
+      return s;
+    }
+
+    case "BUILD": {
+      if (!canBuild(state, action.tile)) return state;
+      const cost = houseCost(action.tile);
+      p.money -= cost;
+      s.houses[action.tile] = (s.houses[action.tile] ?? 0) + 1;
+      const name = BOARD[action.tile].name;
+      log(s, `${p.name} membangun ${s.houses[action.tile] === MAX_HOUSES ? "hotel" : "rumah"} di ${name} (${money(cost)}).`);
+      return s;
+    }
+
+    case "SELL": {
+      if (!canSell(state, action.tile)) return state;
+      const refund = houseCost(action.tile) / 2;
+      p.money += refund;
+      s.houses[action.tile] -= 1;
+      if (s.houses[action.tile] === 0) delete s.houses[action.tile];
+      log(s, `${p.name} menjual bangunan di ${BOARD[action.tile].name} (+${money(refund)}).`);
       return s;
     }
 

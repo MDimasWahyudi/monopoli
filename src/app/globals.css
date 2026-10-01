@@ -56,7 +56,8 @@ body {
 }
 
 .tile-bg {
-  background: linear-gradient(160deg, #e6efdc, #cfdcc2);
+  background: linear-gradient(160deg, #eef5e4, #cfdcc2);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.85), inset -1px -1px 0 rgba(0, 60, 30, 0.25);
 }
 
 /* Pion melompat tiap berpindah petak */

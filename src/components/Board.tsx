@@ -1,5 +1,6 @@
 import { BOARD } from "@/game/board";
 import type { GameState } from "@/game/reducer";
+import { Hotel, House } from "./Buildings";
 import CenterDecor from "./CenterDecor";
 import Pawn from "./Pawn";
 import Tile from "./Tile";
@@ -13,6 +14,16 @@ export function tileCoords(i: number): { row: number; col: number } {
 }
 
 const CELL = 100 / 11;
+
+/** Titik dasar bangunan ke-n di sepanjang pita warna petak (satuan sel, relatif ke sudut kiri-atas petak). */
+function buildingAnchor(i: number, slot: number, slots: number): { x: number; y: number } {
+  const { row, col } = tileCoords(i);
+  const t = (slot + 0.5) / slots;
+  if (row === 10) return { x: col + t, y: row + 0.3 };
+  if (row === 0) return { x: col + t, y: row + 0.97 };
+  if (col === 0) return { x: col + 0.86, y: row + t * 0.8 + 0.18 };
+  return { x: col + 0.14, y: row + t * 0.8 + 0.18 };
+}
 
 export default function Board({
   state,
@@ -68,6 +79,32 @@ export default function Board({
 
             {/* Lapisan pion: berdiri tegak di atas papan yang miring */}
             <div className="preserve3d pointer-events-none absolute inset-0">
+              {Object.entries(state.houses).flatMap(([tileStr, count]) => {
+                const i = Number(tileStr);
+                const hotel = count === 5;
+                const slots = hotel ? 1 : 4;
+                return Array.from({ length: hotel ? 1 : count }, (_, slot) => {
+                  const { x, y } = buildingAnchor(i, slot, slots);
+                  const w = hotel ? 0.5 : 0.24;
+                  return (
+                    <div
+                      key={`${i}-${slot}-${hotel}`}
+                      className="pop-in absolute"
+                      style={{
+                        left: `${x * CELL}%`,
+                        top: `${y * CELL}%`,
+                        width: `${CELL * w}%`,
+                        aspectRatio: hotel ? "60 / 56" : "40 / 44",
+                        transform: "translate(-50%, -100%) rotateX(calc(var(--tilt) * -1))",
+                        transformOrigin: "50% 100%",
+                        zIndex: tileCoords(i).row * 10,
+                      }}
+                    >
+                      {hotel ? <Hotel /> : <House />}
+                    </div>
+                  );
+                });
+              })}
               {alive.map((p) => {
                 const pos = positions[p.id];
                 const { row, col } = tileCoords(pos);

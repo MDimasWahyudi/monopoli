@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CARDS } from "@/game/board";
 import { movementPath } from "@/game/movement";
 import { createGame, reducer, type Action, type GameState } from "@/game/reducer";
+import BuildPanel from "./BuildPanel";
 import ActionBar from "./ActionBar";
 import Board from "./Board";
 import Dice from "./Dice";
@@ -28,6 +29,7 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
   // Posisi pion sementara selama animasi berjalan (pemain -> petak).
   const [moving, setMoving] = useState<Record<number, number>>({});
   const [tm] = useState(timing);
+  const [building, setBuilding] = useState(false);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -81,6 +83,15 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
       <div className="mx-auto mt-3 grid max-w-[1400px] gap-3 px-2 lg:grid-cols-[230px_minmax(0,1fr)_280px] lg:px-0 lg:pr-4">
         <aside className="lg:pt-10">
           <PlayerPanel state={state} />
+          {!winner && (state.phase === "roll" || state.phase === "end") && (
+            <button
+              onClick={() => setBuilding(true)}
+              disabled={busy}
+              className="mt-3 w-full rounded-full border-2 border-white/70 bg-gradient-to-b from-emerald-500 to-emerald-700 py-2 text-sm font-bold text-white shadow-lg disabled:opacity-40"
+            >
+              🏠 Bangun / Jual
+            </button>
+          )}
         </aside>
 
         <div className="lg:-mt-2">
@@ -122,6 +133,7 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
           </button>
         </aside>
       </div>
+      {building && !winner && <BuildPanel state={state} onAction={act} onClose={() => setBuilding(false)} />}
     </main>
   );
 }
