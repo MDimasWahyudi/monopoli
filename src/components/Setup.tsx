@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { PLAYER_COLORS } from "@/game/reducer";
+import RulesPanel from "./RulesPanel";
 import { PLAYER_AVATARS } from "./theme";
 
 export default function Setup({ onStart }: { onStart: (names: string[]) => void }) {
   const [count, setCount] = useState(2);
+  const [rules, setRules] = useState(false);
   const [names, setNames] = useState(["", "", "", ""]);
 
   return (
@@ -59,7 +61,14 @@ export default function Setup({ onStart }: { onStart: (names: string[]) => void 
         >
           MULAI GAME
         </button>
+        <button
+          onClick={() => setRules(true)}
+          className="w-full rounded-full border-2 border-[#6d4524] py-2 text-sm font-bold text-[#6d4524] hover:bg-white/60"
+        >
+          📖 Baca aturan main
+        </button>
       </div>
+      {rules && <RulesPanel onClose={() => setRules(false)} />}
     </main>
   );
 }

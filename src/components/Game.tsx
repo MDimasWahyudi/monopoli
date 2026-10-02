@@ -10,6 +10,7 @@ import Board from "./Board";
 import Dice from "./Dice";
 import GameLog from "./GameLog";
 import PlayerPanel from "./PlayerPanel";
+import RulesPanel from "./RulesPanel";
 import Setup from "./Setup";
 import { PLAYER_COLOR_NAMES, timing } from "./theme";
 
@@ -29,6 +30,7 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
   // Posisi pion sementara selama animasi berjalan (pemain -> petak).
   const [moving, setMoving] = useState<Record<number, number>>({});
   const [tm] = useState(timing);
+  const [rules, setRules] = useState(false);
   // Panel bangun; boughtTile terisi saat dibuka otomatis setelah membeli tanah.
   const [building, setBuilding] = useState<{ boughtTile?: number } | null>(null);
   const alive = useRef(true);
@@ -73,12 +75,20 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
         <h1 className="rounded-md border-4 border-white bg-red-600 px-5 py-1 text-xl font-extrabold tracking-wider text-white shadow-lg sm:text-3xl">
           MONOPOLI <span className="text-sm font-semibold tracking-widest sm:text-lg">NUSANTARA</span>
         </h1>
+        <div className="flex flex-wrap items-center justify-center gap-2">
         <p className="rounded-full bg-slate-900/80 px-4 py-1 text-xs font-bold tracking-wider text-white shadow sm:text-sm">
           {winner ? "GAME SELESAI" : "GILIRAN"}:{" "}
           <span style={{ color: (winner ?? current).color, filter: "brightness(1.35)" }}>
             {(winner ?? current).name.toUpperCase()} ({PLAYER_COLOR_NAMES[(winner ?? current).id].toUpperCase()})
           </span>
         </p>
+        <button
+          onClick={() => setRules(true)}
+          className="rounded-full border-2 border-[#6d4524] bg-[#f3ecdc] px-3 py-0.5 text-xs font-bold text-[#6d4524] shadow hover:bg-white sm:text-sm"
+        >
+          📖 Aturan
+        </button>
+        </div>
       </header>
 
       <div className="mx-auto mt-3 grid max-w-[1400px] gap-3 px-2 lg:grid-cols-[230px_minmax(0,1fr)_280px] lg:px-0 lg:pr-4">
@@ -137,6 +147,7 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
           </button>
         </aside>
       </div>
+      {rules && <RulesPanel onClose={() => setRules(false)} />}
       {building && !winner && (
         <BuildPanel
           state={state}
