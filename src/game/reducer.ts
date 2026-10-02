@@ -50,6 +50,8 @@ export type GameState = {
   current: number;
   phase: Phase;
   dice: [number, number] | null;
+  /** Bertambah tiap lemparan dadu; dipakai klien untuk memicu animasi. */
+  rolls: number;
   rolledDoubles: boolean;
   doublesCount: number;
   /** tileIndex -> playerId */
@@ -79,7 +81,9 @@ export type Action =
   | { type: "DECLARE_BANKRUPT" }
   | { type: "PROPOSE_TRADE"; trade: Trade }
   | { type: "ACCEPT_TRADE" }
-  | { type: "REJECT_TRADE" };
+  | { type: "REJECT_TRADE" }
+  /** Pemain menyerah (atau dikeluarkan karena meninggalkan game online). */
+  | { type: "FORFEIT"; player: number };
 
 export function createGame(names: string[]): GameState {
   const players = names.map<Player>((name, id) => ({
@@ -97,6 +101,7 @@ export function createGame(names: string[]): GameState {
     current: 0,
     phase: "roll",
     dice: null,
+    rolls: 0,
     rolledDoubles: false,
     doublesCount: 0,
     owners: {},
@@ -392,8 +397,15 @@ export function validateTrade(state: GameState, t: Trade): boolean {
 
 export function reducer(state: GameState, action: Action): GameState {
   if (state.phase === "over") return state;
-  // Saat ada tawaran tukar, hanya jawaban yang diterima.
-  if (state.trade && action.type !== "ACCEPT_TRADE" && action.type !== "REJECT_TRADE") return state;
+  // Saat ada tawaran tukar, hanya jawaban (atau menyerah) yang diterima.
+  if (
+    state.trade &&
+    action.type !== "ACCEPT_TRADE" &&
+    action.type !== "REJECT_TRADE" &&
+    action.type !== "FORFEIT"
+  ) {
+    return state;
+  }
   const s = structuredClone(state);
   const p = s.players[s.current];
 
@@ -404,6 +416,7 @@ export function reducer(state: GameState, action: Action): GameState {
       const total = a + b;
       const doubles = a === b;
       s.dice = [a, b];
+      s.rolls += 1;
       log(s, `${p.name} melempar dadu: ${a} + ${b} = ${total}.`);
 
       if (p.inJail) {
@@ -565,6 +578,25 @@ export function reducer(state: GameState, action: Action): GameState {
       s.players[t.from].money += t.getMoney - t.giveMoney;
       s.players[t.to].money += t.giveMoney - t.getMoney;
       log(s, `${s.players[t.to].name} menerima tawaran. Tukar-menukar dengan ${s.players[t.from].name} selesai.`);
+      return s;
+    }
+
+    case "FORFEIT": {
+      const quitter = s.players[action.player];
+      if (!quitter || quitter.bankrupt) return state;
+      const wasCurrent = action.player === s.current;
+      if (s.trade && (s.trade.from === action.player || s.trade.to === action.player)) s.trade = null;
+      log(s, `${quitter.name} menyerah.`);
+      declareBankrupt(s, quitter, null);
+      if (s.phase === "over") return s;
+      if (wasCurrent) {
+        s.debt = null;
+        s.doublesCount = 0;
+        s.rolledDoubles = false;
+        nextPlayer(s);
+        s.phase = "roll";
+        log(s, `Giliran ${s.players[s.current].name}.`);
+      }
       return s;
     }
 

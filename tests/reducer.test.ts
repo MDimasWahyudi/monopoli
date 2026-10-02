@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BOARD } from "@/game/board";
+import { resolveAction, sanitizeAction, seatMayAct } from "@/game/actions";
 import { movementPath } from "@/game/movement";
 import { createGame, reducer, rentFor, type GameState } from "@/game/reducer";
 
@@ -402,5 +403,77 @@ describe("trading", () => {
     g.owners[1] = 0;
     g.houses[1] = 1;
     expect(bad({ giveTiles: [1] })).toBe(g); // ada bangunan di grup
+  });
+});
+
+describe("FORFEIT dan penghitung lemparan", () => {
+  it("rolls bertambah tiap lemparan", () => {
+    const s = roll(fresh(), 1, 2);
+    expect(s.rolls).toBe(1);
+  });
+
+  it("pemain menyerah: bangkrut ke bank, giliran pindah bila sedang gilirannya", () => {
+    const g = fresh();
+    g.owners[6] = 0;
+    g.houses[1] = 0;
+    const s = reducer(g, { type: "FORFEIT", player: 0 });
+    expect(s.players[0].bankrupt).toBe(true);
+    expect(s.owners[6]).toBeUndefined();
+    expect(s.current).toBe(1);
+    expect(s.phase).toBe("roll");
+  });
+
+  it("menyerah saat bukan gilirannya tidak mengubah giliran; sisa satu pemain = menang", () => {
+    let g = fresh();
+    g = reducer(g, { type: "FORFEIT", player: 2 });
+    expect(g.current).toBe(0);
+    g = reducer(g, { type: "FORFEIT", player: 1 });
+    expect(g.phase).toBe("over");
+    expect(g.winner).toBe(0);
+  });
+
+  it("menyerah membatalkan tawaran tukar yang melibatkannya", () => {
+    const g = fresh();
+    g.owners[6] = 0;
+    g.owners[8] = 1;
+    let s = reducer(g, { type: "PROPOSE_TRADE", trade: { from: 0, to: 1, giveTiles: [6], giveMoney: 0, getTiles: [8], getMoney: 0 } });
+    s = reducer(s, { type: "FORFEIT", player: 1 });
+    expect(s.trade).toBeNull();
+  });
+});
+
+describe("aksi klien", () => {
+  it("sanitizeAction menolak input aneh", () => {
+    expect(sanitizeAction(null)).toBeNull();
+    expect(sanitizeAction({ type: "HACK" })).toBeNull();
+    expect(sanitizeAction({ type: "BUILD", tile: 99 })).toBeNull();
+    expect(sanitizeAction({ type: "BUILD", tile: "1" })).toBeNull();
+    expect(sanitizeAction({ type: "PROPOSE_TRADE", trade: { from: 0, to: 1 } })).toBeNull();
+    expect(sanitizeAction({ type: "PROPOSE_TRADE", trade: { from: 0, to: 1, giveTiles: "x", giveMoney: 0, getTiles: [], getMoney: 0 } })).toBeNull();
+  });
+
+  it("sanitizeAction menerima aksi valid dan membuang field tambahan (termasuk dadu dari klien)", () => {
+    expect(sanitizeAction({ type: "ROLL", dice: [6, 6] })).toEqual({ type: "ROLL" });
+    expect(sanitizeAction({ type: "BUILD", tile: 1, extra: 1 })).toEqual({ type: "BUILD", tile: 1 });
+  });
+
+  it("resolveAction mengacak dadu di sisi pengendali", () => {
+    const a = resolveAction({ type: "ROLL" }, () => 0.999, 8);
+    expect(a).toEqual({ type: "ROLL", dice: [6, 6], cardIndex: 7 });
+    expect(resolveAction({ type: "BUY" }, () => 0, 8)).toEqual({ type: "BUY" });
+  });
+
+  it("seatMayAct: hanya pemain giliran, kecuali jawaban tukar dan menyerah", () => {
+    const g = fresh();
+    expect(seatMayAct(g, 0, { type: "ROLL" })).toBe(true);
+    expect(seatMayAct(g, 1, { type: "ROLL" })).toBe(false);
+    expect(seatMayAct(g, 1, { type: "FORFEIT", player: 1 })).toBe(true);
+    expect(seatMayAct(g, 2, { type: "FORFEIT", player: 1 })).toBe(false);
+    expect(seatMayAct(g, 0, { type: "FORFEIT", player: 1 })).toBe(true); // tuan rumah
+    g.trade = { from: 0, to: 1, giveTiles: [], giveMoney: 10, getTiles: [], getMoney: 0 };
+    expect(seatMayAct(g, 1, { type: "ACCEPT_TRADE" })).toBe(true);
+    expect(seatMayAct(g, 0, { type: "ACCEPT_TRADE" })).toBe(false);
+    expect(seatMayAct(g, 0, { type: "REJECT_TRADE" })).toBe(true); // pengaju boleh membatalkan
+    expect(seatMayAct(g, 2, { type: "REJECT_TRADE" })).toBe(false);
   });
 });

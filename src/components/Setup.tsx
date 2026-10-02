@@ -5,7 +5,7 @@ import { PLAYER_COLORS } from "@/game/reducer";
 import RulesPanel from "./RulesPanel";
 import { PLAYER_AVATARS } from "./theme";
 
-export default function Setup({ onStart }: { onStart: (names: string[]) => void }) {
+export default function Setup({ onStart, onBack }: { onStart: (names: string[]) => void; onBack: () => void }) {
   const [count, setCount] = useState(2);
   const [rules, setRules] = useState(false);
   const [names, setNames] = useState(["", "", "", ""]);
@@ -66,6 +66,9 @@ export default function Setup({ onStart }: { onStart: (names: string[]) => void 
           className="w-full rounded-full border-2 border-[#6d4524] py-2 text-sm font-bold text-[#6d4524] hover:bg-white/60"
         >
           📖 Baca aturan main
+        </button>
+        <button onClick={onBack} className="w-full text-sm text-slate-500 underline">
+          ← Kembali
         </button>
       </div>
       {rules && <RulesPanel onClose={() => setRules(false)} />}
