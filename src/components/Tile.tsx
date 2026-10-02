@@ -37,12 +37,14 @@ export default function Tile({
   col,
   owner,
   active,
+  mortgaged,
 }: {
   tile: TileData;
   row: number;
   col: number;
   owner?: Player;
   active: boolean;
+  mortgaged?: boolean;
 }) {
   const side = sideOf(row, col);
   const layout = LAYOUT[side];
@@ -71,6 +73,13 @@ export default function Tile({
         </span>
         {price !== null && <span className="text-[6px] opacity-70 sm:text-[9px]">{price}</span>}
       </div>
+      {mortgaged && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-500/55">
+          <span className="-rotate-12 rounded border border-white/80 bg-slate-700/90 px-0.5 text-[6px] font-extrabold tracking-wider text-white sm:text-[9px]">
+            GADAI
+          </span>
+        </div>
+      )}
       {owner && (
         <div
           className={`absolute ${layout.owner}`}

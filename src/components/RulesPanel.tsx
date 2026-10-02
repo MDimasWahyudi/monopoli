@@ -296,6 +296,62 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    id: "gadai",
+    icon: "💰",
+    title: "Gadai",
+    art: (
+      <Frame>
+        <MiniTile group="red" name="Bandung" price={220} owner={PLAYER_COLORS[0]} />
+        <Arrow label="Gadai" />
+        <MiniTile group="red" name="Bandung" price={220} owner={PLAYER_COLORS[0]}>
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-500/55">
+            <span className="-rotate-12 rounded border border-white/80 bg-slate-700/90 px-1 text-[9px] font-extrabold text-white">GADAI</span>
+          </div>
+        </MiniTile>
+        <Arrow label="dapat" />
+        <div className="rounded-lg bg-amber-200 px-3 py-2 text-center text-sm font-extrabold">💰 {money(110)}</div>
+      </Frame>
+    ),
+    points: [
+      <>
+        Butuh uang? Buka <b>🏠 Kelola Properti → 💰 Gadai</b>. Bank memberi <b>setengah harga</b> properti.
+      </>,
+      "Properti yang digadai ditandai GADAI dan tidak menghasilkan sewa. Pemiliknya tetap kamu.",
+      "Menebus kembali butuh harga gadai ditambah 10%.",
+      "Properti dengan rumah/hotel baru bisa digadai setelah semua bangunan di grup warnanya dijual. Selama ada yang digadai di satu set, kamu tidak bisa membangun di set itu.",
+      <>
+        Kalau uangmu kurang saat harus membayar sewa atau pajak, game memberi kesempatan menggadai dan menjual bangunan dulu, baru <b>Bayar</b>. Kamu bangkrut hanya bila seluruh asetmu pun tidak cukup, atau memilih menyerah.
+      </>,
+    ],
+  },
+  {
+    id: "tukar",
+    icon: "🤝",
+    title: "Tukar (Trading)",
+    art: (
+      <Frame>
+        <div className="flex flex-col items-center gap-1">
+          <PawnIcon color={PLAYER_COLORS[0]} size={26} />
+          <MiniTile group="green" name="Surabaya" price={300} />
+        </div>
+        <span className="text-3xl text-slate-600">⇄</span>
+        <div className="flex flex-col items-center gap-1">
+          <PawnIcon color={PLAYER_COLORS[1]} size={26} />
+          <div className="flex h-24 w-16 items-center justify-center rounded border border-amber-600 bg-amber-200 text-xl font-extrabold">💰</div>
+        </div>
+      </Frame>
+    ),
+    points: [
+      <>
+        Pada giliranmu, buka <b>🏠 Kelola Properti → 🤝 Tukar</b>, pilih pemain, lalu tentukan properti dan uang yang kamu berikan serta minta.
+      </>,
+      "Pemain tujuan akan melihat tawaran dan memilih Terima atau Tolak di perangkat yang sama. Permainan berhenti sampai tawaran dijawab.",
+      "Properti yang ada bangunan di grup warnanya tidak bisa ditukar; jual dulu bangunannya.",
+      "Properti yang digadai tetap bisa ditukar dan berpindah dalam keadaan tetap digadai.",
+      "Tukar-menukar adalah cara terbaik melengkapi set warna!",
+    ],
+  },
+  {
     id: "bangkrut",
     icon: "💥",
     title: "Bangkrut & Menang",
@@ -315,7 +371,7 @@ const SECTIONS: Section[] = [
       </Frame>
     ),
     points: [
-      "Bila kamu tidak sanggup membayar, kamu bangkrut dan keluar dari permainan.",
+      "Bila kamu tidak sanggup membayar bahkan setelah mencairkan semua aset (gadai dan jual bangunan), atau memilih menyerah, kamu bangkrut dan keluar dari permainan.",
       "Seluruh uang dan tanahmu pindah ke pemain yang kamu bayar (atau kembali ke bank bila utang ke bank). Rumah dan hotel dibongkar.",
       "Pemain terakhir yang bertahan memenangkan game.",
       <>

@@ -25,7 +25,25 @@ export type Player = {
   bankrupt: boolean;
 };
 
-export type Phase = "roll" | "buy" | "end" | "over";
+export type Phase = "roll" | "buy" | "end" | "debt" | "over";
+
+/** Utang yang harus dilunasi sebelum game lanjut; pemain boleh menggadai/menjual bangunan dulu. */
+export type Debt = {
+  amount: number;
+  /** Pemain penerima, atau null bila dibayar ke bank. */
+  creditor: number | null;
+  /** Lanjutan gerakan bila utang berasal dari denda penjara sebelum berjalan. */
+  resume?: { steps: number; cardIndex: number };
+};
+
+export type Trade = {
+  from: number;
+  to: number;
+  giveTiles: number[];
+  giveMoney: number;
+  getTiles: number[];
+  getMoney: number;
+};
 
 export type GameState = {
   players: Player[];
@@ -38,6 +56,11 @@ export type GameState = {
   owners: Record<number, number>;
   /** tileIndex -> jumlah rumah (1-4), 5 = hotel */
   houses: Record<number, number>;
+  /** tileIndex -> true bila digadaikan (tidak menghasilkan sewa) */
+  mortgaged: Record<number, boolean>;
+  debt: Debt | null;
+  /** Tawaran tukar-menukar yang menunggu jawaban pemain tujuan. */
+  trade: Trade | null;
   log: string[];
   winner: number | null;
 };
@@ -49,7 +72,14 @@ export type Action =
   | { type: "END_TURN" }
   | { type: "PAY_JAIL" }
   | { type: "BUILD"; tile: number }
-  | { type: "SELL"; tile: number };
+  | { type: "SELL"; tile: number }
+  | { type: "MORTGAGE"; tile: number }
+  | { type: "UNMORTGAGE"; tile: number }
+  | { type: "PAY_DEBT" }
+  | { type: "DECLARE_BANKRUPT" }
+  | { type: "PROPOSE_TRADE"; trade: Trade }
+  | { type: "ACCEPT_TRADE" }
+  | { type: "REJECT_TRADE" };
 
 export function createGame(names: string[]): GameState {
   const players = names.map<Player>((name, id) => ({
@@ -71,6 +101,9 @@ export function createGame(names: string[]): GameState {
     doublesCount: 0,
     owners: {},
     houses: {},
+    mortgaged: {},
+    debt: null,
+    trade: null,
     log: [`Game dimulai. Giliran ${players[0].name}.`],
     winner: null,
   };
@@ -91,7 +124,7 @@ function countOwned(state: GameState, playerId: number, tiles: number[]): number
 export function rentFor(state: GameState, tileIndex: number, diceTotal: number): number {
   const tile = BOARD[tileIndex];
   const owner = state.owners[tileIndex];
-  if (owner === undefined) return 0;
+  if (owner === undefined || state.mortgaged[tileIndex]) return 0;
   switch (tile.type) {
     case "property": {
       const built = state.houses[tileIndex] ?? 0;
@@ -132,10 +165,15 @@ function declareBankrupt(s: GameState, p: Player, creditorId: number | null) {
   log(s, `${p.name} bangkrut!`);
   if (creditorId !== null) s.players[creditorId].money += p.money;
   p.money = 0;
+  s.debt = null;
   for (const tile of ownedTiles(s, p.id)) {
     delete s.houses[tile]; // bangunan dikembalikan ke bank
-    if (creditorId === null) delete s.owners[tile];
-    else s.owners[tile] = creditorId;
+    if (creditorId === null) {
+      delete s.owners[tile];
+      delete s.mortgaged[tile];
+    } else {
+      s.owners[tile] = creditorId; // status gadai ikut pindah
+    }
   }
   const alive = s.players.filter((x) => !x.bankrupt);
   if (alive.length === 1) {
@@ -145,12 +183,47 @@ function declareBankrupt(s: GameState, p: Player, creditorId: number | null) {
   }
 }
 
-/** Bayar ke pemain lain (creditorId) atau bank (null). Mengembalikan false bila pembayar bangkrut. */
-function pay(s: GameState, p: Player, amount: number, creditorId: number | null): boolean {
+export function mortgageValue(tileIndex: number): number {
+  const tile = BOARD[tileIndex];
+  return isBuyable(tile) ? tile.price / 2 : 0;
+}
+
+export function unmortgageCost(tileIndex: number): number {
+  return Math.ceil((mortgageValue(tileIndex) * 11) / 10); // bunga 10%, hindari galat float
+}
+
+/** Uang tunai ditambah semua yang bisa dicairkan (gadai tanah, jual bangunan). */
+export function liquidationValue(state: GameState, playerId: number): number {
+  let total = state.players[playerId].money;
+  for (const tile of ownedTiles(state, playerId)) {
+    total += (state.houses[tile] ?? 0) * (houseCost(tile) / 2);
+    if (!state.mortgaged[tile]) total += mortgageValue(tile);
+  }
+  return total;
+}
+
+/**
+ * Bayar ke pemain lain (creditorId) atau bank (null).
+ * Mengembalikan true bila lunas. Bila uang kurang tetapi aset cukup, pemain masuk fase "debt"
+ * (boleh menggadai dulu); bila aset pun tidak cukup, langsung bangkrut.
+ */
+function pay(
+  s: GameState,
+  p: Player,
+  amount: number,
+  creditorId: number | null,
+  resume?: Debt["resume"],
+): boolean {
   if (p.money >= amount) {
     p.money -= amount;
     if (creditorId !== null) s.players[creditorId].money += amount;
     return true;
+  }
+  if (liquidationValue(s, p.id) >= amount) {
+    s.debt = { amount, creditor: creditorId, resume };
+    s.phase = "debt";
+    log(s, `${p.name} kekurangan uang ${money(amount - p.money)}. Gadaikan properti atau jual bangunan untuk melunasi.`);
+    return false;
   }
   declareBankrupt(s, p, creditorId);
   return false;
@@ -174,8 +247,12 @@ function land(s: GameState, p: Player, cardIndex: number) {
         }
       } else if (owner !== p.id) {
         const rent = rentFor(s, p.position, total);
-        log(s, `${p.name} mendarat di ${tile.name} milik ${s.players[owner].name} dan membayar sewa ${money(rent)}.`);
-        pay(s, p, rent, owner);
+        if (s.mortgaged[p.position]) {
+          log(s, `${p.name} mendarat di ${tile.name} milik ${s.players[owner].name}, tetapi sedang digadai (tanpa sewa).`);
+        } else {
+          log(s, `${p.name} mendarat di ${tile.name} milik ${s.players[owner].name} dan membayar sewa ${money(rent)}.`);
+          pay(s, p, rent, owner);
+        }
       } else {
         log(s, `${p.name} mendarat di properti miliknya sendiri, ${tile.name}.`);
       }
@@ -235,7 +312,17 @@ export function ownsFullGroup(state: GameState, playerId: number, tileIndex: num
 }
 
 function canActNow(state: GameState): boolean {
-  return state.phase === "roll" || state.phase === "end";
+  return (state.phase === "roll" || state.phase === "end") && !state.trade;
+}
+
+/** Menjual bangunan & menggadai juga boleh saat melunasi utang. */
+function canRaiseCash(state: GameState): boolean {
+  return (canActNow(state) || state.phase === "debt") && !state.trade;
+}
+
+function groupHasMortgage(state: GameState, tileIndex: number): boolean {
+  const tile = BOARD[tileIndex];
+  return tile.type === "property" && tilesInGroup(tile.group).some((t) => state.mortgaged[t]);
 }
 
 export function canBuild(state: GameState, tileIndex: number): boolean {
@@ -246,6 +333,7 @@ export function canBuild(state: GameState, tileIndex: number): boolean {
     BOARD[tileIndex].type === "property" &&
     state.owners[tileIndex] === p.id &&
     ownsFullGroup(state, p.id, tileIndex) &&
+    !groupHasMortgage(state, tileIndex) &&
     built < MAX_HOUSES &&
     built === Math.min(...groupHouseCounts(state, tileIndex)) && // membangun merata
     p.money >= houseCost(tileIndex)
@@ -256,15 +344,56 @@ export function canSell(state: GameState, tileIndex: number): boolean {
   const p = state.players[state.current];
   const built = state.houses[tileIndex] ?? 0;
   return (
-    canActNow(state) &&
+    canRaiseCash(state) &&
     state.owners[tileIndex] === p.id &&
     built > 0 &&
     built === Math.max(...groupHouseCounts(state, tileIndex)) // menjual merata
   );
 }
 
+/** Boleh digadaikan: milik pemain aktif, belum digadai, dan tidak ada bangunan di seluruh grupnya. */
+export function canMortgage(state: GameState, tileIndex: number): boolean {
+  const p = state.players[state.current];
+  const tile = BOARD[tileIndex];
+  if (!canRaiseCash(state) || !isBuyable(tile)) return false;
+  if (state.owners[tileIndex] !== p.id || state.mortgaged[tileIndex]) return false;
+  return tile.type !== "property" || tilesInGroup(tile.group).every((t) => !state.houses[t]);
+}
+
+export function canUnmortgage(state: GameState, tileIndex: number): boolean {
+  const p = state.players[state.current];
+  return (
+    canActNow(state) &&
+    state.owners[tileIndex] === p.id &&
+    !!state.mortgaged[tileIndex] &&
+    p.money >= unmortgageCost(tileIndex)
+  );
+}
+
+/** Petak yang boleh ditukar: tidak ada bangunan di grupnya (bangunan harus dijual dulu). */
+export function isTradable(state: GameState, tileIndex: number): boolean {
+  const tile = BOARD[tileIndex];
+  if (!isBuyable(tile)) return false;
+  return tile.type !== "property" || tilesInGroup(tile.group).every((t) => !state.houses[t]);
+}
+
+export function validateTrade(state: GameState, t: Trade): boolean {
+  const from = state.players[t.from];
+  const to = state.players[t.to];
+  if (!from || !to || from.bankrupt || to.bankrupt || t.from === t.to) return false;
+  const money = (n: number) => Number.isInteger(n) && n >= 0;
+  if (!money(t.giveMoney) || !money(t.getMoney)) return false;
+  if (from.money < t.giveMoney || to.money < t.getMoney) return false;
+  if (t.giveTiles.length + t.getTiles.length === 0 && t.giveMoney + t.getMoney === 0) return false;
+  const okTiles = (tiles: number[], owner: number) =>
+    new Set(tiles).size === tiles.length && tiles.every((x) => state.owners[x] === owner && isTradable(state, x));
+  return okTiles(t.giveTiles, t.from) && okTiles(t.getTiles, t.to);
+}
+
 export function reducer(state: GameState, action: Action): GameState {
   if (state.phase === "over") return state;
+  // Saat ada tawaran tukar, hanya jawaban yang diterima.
+  if (state.trade && action.type !== "ACCEPT_TRADE" && action.type !== "REJECT_TRADE") return state;
   const s = structuredClone(state);
   const p = s.players[s.current];
 
@@ -292,11 +421,11 @@ export function reducer(state: GameState, action: Action): GameState {
             log(s, `${p.name} membayar denda ${money(JAIL_FINE)} dan keluar dari Penjara.`);
             p.inJail = false;
             p.jailTurns = 0;
-            if (pay(s, p, JAIL_FINE, null)) {
+            if (pay(s, p, JAIL_FINE, null, { steps: total, cardIndex: action.cardIndex })) {
               move(s, p, total);
               land(s, p, action.cardIndex);
-            } else {
-              s.phase = "end";
+            } else if (s.phase === "roll") {
+              s.phase = "end"; // bangkrut (bukan fase utang/selesai)
             }
           } else {
             log(s, `${p.name} tetap di Penjara (${p.jailTurns}/3).`);
@@ -365,6 +494,77 @@ export function reducer(state: GameState, action: Action): GameState {
       s.houses[action.tile] -= 1;
       if (s.houses[action.tile] === 0) delete s.houses[action.tile];
       log(s, `${p.name} menjual bangunan di ${BOARD[action.tile].name} (+${money(refund)}).`);
+      return s;
+    }
+
+    case "MORTGAGE": {
+      if (!canMortgage(state, action.tile)) return state;
+      const value = mortgageValue(action.tile);
+      p.money += value;
+      s.mortgaged[action.tile] = true;
+      log(s, `${p.name} menggadaikan ${BOARD[action.tile].name} (+${money(value)}).`);
+      return s;
+    }
+
+    case "UNMORTGAGE": {
+      if (!canUnmortgage(state, action.tile)) return state;
+      const cost = unmortgageCost(action.tile);
+      p.money -= cost;
+      delete s.mortgaged[action.tile];
+      log(s, `${p.name} menebus ${BOARD[action.tile].name} (${money(cost)}).`);
+      return s;
+    }
+
+    case "PAY_DEBT": {
+      if (s.phase !== "debt" || !s.debt || p.money < s.debt.amount) return state;
+      const { amount, creditor, resume } = s.debt;
+      p.money -= amount;
+      if (creditor !== null) s.players[creditor].money += amount;
+      s.debt = null;
+      log(s, `${p.name} melunasi utang ${money(amount)}.`);
+      if (resume) {
+        move(s, p, resume.steps);
+        land(s, p, resume.cardIndex);
+      } else {
+        s.phase = "end";
+      }
+      return s;
+    }
+
+    case "DECLARE_BANKRUPT": {
+      if (s.phase !== "debt" || !s.debt) return state;
+      declareBankrupt(s, p, s.debt.creditor);
+      if (s.phase === "debt") s.phase = "end";
+      return s;
+    }
+
+    case "PROPOSE_TRADE": {
+      if (!canActNow(state) || action.trade.from !== s.current || !validateTrade(state, action.trade)) return state;
+      s.trade = action.trade;
+      log(s, `${p.name} menawarkan tukar-menukar kepada ${s.players[action.trade.to].name}.`);
+      return s;
+    }
+
+    case "REJECT_TRADE": {
+      if (!s.trade) return state;
+      log(s, `${s.players[s.trade.to].name} menolak tawaran dari ${s.players[s.trade.from].name}.`);
+      s.trade = null;
+      return s;
+    }
+
+    case "ACCEPT_TRADE": {
+      const t = s.trade;
+      if (!t) return state;
+      s.trade = null;
+      if (!validateTrade(s, t)) {
+        log(s, "Tawaran tidak lagi valid dan dibatalkan.");
+        return s;
+      }
+      for (const x of t.giveTiles) s.owners[x] = t.to;
+      for (const x of t.getTiles) s.owners[x] = t.from;
+      s.players[t.from].money += t.getMoney - t.giveMoney;
+      s.players[t.to].money += t.giveMoney - t.getMoney;
+      log(s, `${s.players[t.to].name} menerima tawaran. Tukar-menukar dengan ${s.players[t.from].name} selesai.`);
       return s;
     }
 

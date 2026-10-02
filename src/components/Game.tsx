@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { CARDS } from "@/game/board";
 import { movementPath } from "@/game/movement";
 import { createGame, reducer, type Action, type GameState } from "@/game/reducer";
-import BuildPanel from "./BuildPanel";
 import ActionBar from "./ActionBar";
 import Board from "./Board";
+import DebtPanel from "./DebtPanel";
+import ManagePanel, { type ManageTab } from "./ManagePanel";
+import TradeResponse from "./TradeResponse";
 import Dice from "./Dice";
 import GameLog from "./GameLog";
 import PlayerPanel from "./PlayerPanel";
@@ -32,7 +34,7 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
   const [tm] = useState(timing);
   const [rules, setRules] = useState(false);
   // Panel bangun; boughtTile terisi saat dibuka otomatis setelah membeli tanah.
-  const [building, setBuilding] = useState<{ boughtTile?: number } | null>(null);
+  const [building, setBuilding] = useState<{ boughtTile?: number; tab?: ManageTab } | null>(null);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -100,7 +102,7 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
               disabled={busy}
               className="mt-3 w-full rounded-full border-2 border-white/70 bg-gradient-to-b from-emerald-500 to-emerald-700 py-2 text-sm font-bold text-white shadow-lg disabled:opacity-40"
             >
-              🏠 Bangun / Jual
+              🏠 Kelola Properti
             </button>
           )}
         </aside>
@@ -149,13 +151,16 @@ function Match({ names, onExit }: { names: string[]; onExit: () => void }) {
       </div>
       {rules && <RulesPanel onClose={() => setRules(false)} />}
       {building && !winner && (
-        <BuildPanel
+        <ManagePanel
           state={state}
           onAction={act}
           onClose={() => setBuilding(null)}
           boughtTile={building.boughtTile}
+          initialTab={building.tab}
         />
       )}
+      {!winner && state.phase === "debt" && <DebtPanel state={state} onAction={act} />}
+      {!winner && state.trade && <TradeResponse state={state} onAction={act} />}
     </main>
   );
 }

@@ -247,9 +247,160 @@ describe("rumah dan hotel", () => {
     g.houses[1] = 2;
     g.players[0].position = 3;
     g.players[0].money = 1;
-    const s = roll(g, 1, 2); // A mendarat di Medan milik B, sewa 6, bangkrut
+    let s = roll(g, 1, 2); // A mendarat di Medan milik B, sewa 6, tapi masih punya aset
+    expect(s.phase).toBe("debt");
+    s = reducer(s, { type: "DECLARE_BANKRUPT" });
     expect(s.players[0].bankrupt).toBe(true);
     expect(s.owners[1]).toBe(1);
     expect(s.houses[1]).toBeUndefined();
+  });
+});
+
+describe("gadai", () => {
+  it("menggadai memberi setengah harga, sewa jadi nol, dan bisa ditebus +10%", () => {
+    let g = fresh();
+    g.owners[6] = 1;
+    g.current = 1;
+    g = reducer(g, { type: "MORTGAGE", tile: 6 });
+    expect(g.mortgaged[6]).toBe(true);
+    expect(g.players[1].money).toBe(1550);
+    expect(rentFor(g, 6, 0)).toBe(0);
+    expect(reducer(g, { type: "MORTGAGE", tile: 6 })).toBe(g);
+    g = reducer(g, { type: "UNMORTGAGE", tile: 6 });
+    expect(g.mortgaged[6]).toBeUndefined();
+    expect(g.players[1].money).toBe(1550 - 55);
+  });
+
+  it("tidak bisa menggadai bila ada bangunan di grup; tidak bisa membangun bila ada yang digadai", () => {
+    let g = fresh();
+    g.owners[1] = 0;
+    g.owners[3] = 0;
+    g = reducer(g, { type: "BUILD", tile: 1 });
+    expect(reducer(g, { type: "MORTGAGE", tile: 3 })).toBe(g);
+    let h = fresh();
+    h.owners[1] = 0;
+    h.owners[3] = 0;
+    h = reducer(h, { type: "MORTGAGE", tile: 3 });
+    expect(reducer(h, { type: "BUILD", tile: 1 })).toBe(h);
+  });
+
+  it("mendarat di properti digadai tidak membayar sewa", () => {
+    const g = fresh();
+    g.owners[6] = 1;
+    g.mortgaged[6] = true;
+    const s = roll(g, 2, 4);
+    expect(s.players[0].money).toBe(1500);
+    expect(s.phase).toBe("end");
+  });
+});
+
+describe("utang", () => {
+  const indebted = () => {
+    const g = fresh();
+    g.owners[39] = 1;
+    g.owners[37] = 1;
+    g.owners[1] = 0;
+    g.owners[3] = 0;
+    g.owners[6] = 0;
+    g.players[0].position = 36;
+    g.players[0].money = 30; // aset: 30 + gadai 30 + 30 + 50 = 140
+    return roll(g, 1, 2); // sewa 100 (set penuh, dobel 100)
+  };
+
+  it("masuk fase debt bila aset cukup, lalu lunas setelah menggadai", () => {
+    let s = indebted();
+    expect(s.phase).toBe("debt");
+    expect(s.debt).toMatchObject({ amount: 100, creditor: 1 });
+    expect(reducer(s, { type: "PAY_DEBT" })).toBe(s); // uang belum cukup
+    expect(reducer(s, { type: "ROLL", dice: [1, 2], cardIndex: 0 })).toBe(s);
+    s = reducer(s, { type: "MORTGAGE", tile: 1 }); // 60
+    s = reducer(s, { type: "MORTGAGE", tile: 3 }); // 90
+    expect(reducer(s, { type: "PAY_DEBT" })).toBe(s); // masih kurang
+    s = reducer(s, { type: "MORTGAGE", tile: 6 }); // 140
+    s = reducer(s, { type: "PAY_DEBT" });
+    expect(s.phase).toBe("end");
+    expect(s.players[0].money).toBe(40);
+  });
+
+  it("lunas setelah uang cukup lalu lanjut ke akhir giliran", () => {
+    let s = indebted();
+    s.players[0].money = 100;
+    s = reducer(s, { type: "PAY_DEBT" });
+    expect(s.phase).toBe("end");
+    expect(s.debt).toBeNull();
+    expect(s.players[1].money).toBe(1600);
+  });
+
+  it("langsung bangkrut bila seluruh aset pun tidak cukup", () => {
+    const g = createGame(["A", "B"]);
+    g.owners[39] = 1;
+    g.owners[37] = 1;
+    g.players[0].position = 36;
+    g.players[0].money = 10;
+    const s = roll(g, 1, 2);
+    expect(s.players[0].bankrupt).toBe(true);
+    expect(s.phase).toBe("over");
+  });
+
+  it("denda penjara ke-3 yang ditunda melanjutkan gerakan setelah lunas", () => {
+    const g = fresh();
+    g.players[0].inJail = true;
+    g.players[0].position = 10;
+    g.players[0].jailTurns = 2;
+    g.players[0].money = 20;
+    g.owners[6] = 0;
+    let s = roll(g, 1, 2);
+    expect(s.phase).toBe("debt");
+    s = reducer(s, { type: "MORTGAGE", tile: 6 }); // +50 = 70
+    s = reducer(s, { type: "PAY_DEBT" });
+    expect(s.players[0].inJail).toBe(false);
+    expect(s.players[0].position).toBe(13);
+    expect(s.players[0].money).toBe(20);
+  });
+});
+
+describe("trading", () => {
+  const base = () => {
+    const g = fresh();
+    g.owners[6] = 0;
+    g.owners[8] = 1;
+    return g;
+  };
+  const offer = { from: 0, to: 1, giveTiles: [6], giveMoney: 50, getTiles: [8], getMoney: 0 };
+
+  it("tawaran diterima menukar tanah dan uang", () => {
+    let g = reducer(base(), { type: "PROPOSE_TRADE", trade: offer });
+    expect(g.trade).toEqual(offer);
+    g = reducer(g, { type: "ACCEPT_TRADE" });
+    expect(g.trade).toBeNull();
+    expect(g.owners[6]).toBe(1);
+    expect(g.owners[8]).toBe(0);
+    expect(g.players[0].money).toBe(1450);
+    expect(g.players[1].money).toBe(1550);
+  });
+
+  it("ditolak: tidak ada perubahan", () => {
+    let g = reducer(base(), { type: "PROPOSE_TRADE", trade: offer });
+    g = reducer(g, { type: "REJECT_TRADE" });
+    expect(g.trade).toBeNull();
+    expect(g.owners[6]).toBe(0);
+  });
+
+  it("aksi lain diblokir selama ada tawaran", () => {
+    const g = reducer(base(), { type: "PROPOSE_TRADE", trade: offer });
+    expect(roll(g, 1, 2)).toBe(g);
+    expect(reducer(g, { type: "END_TURN" })).toBe(g);
+  });
+
+  it("menolak tawaran tidak valid", () => {
+    const g = base();
+    const bad = (t: Partial<typeof offer>) => reducer(g, { type: "PROPOSE_TRADE", trade: { ...offer, ...t } });
+    expect(bad({ giveTiles: [8] })).toBe(g); // bukan milik pemberi
+    expect(bad({ giveMoney: 9999 })).toBe(g); // uang kurang
+    expect(bad({ to: 0 })).toBe(g); // dengan diri sendiri
+    expect(bad({ giveTiles: [], getTiles: [], giveMoney: 0 })).toBe(g); // kosong
+    g.owners[1] = 0;
+    g.houses[1] = 1;
+    expect(bad({ giveTiles: [1] })).toBe(g); // ada bangunan di grup
   });
 });

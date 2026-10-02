@@ -38,9 +38,9 @@ export default function PlayerPanel({ state }: { state: GameState }) {
                     key={t}
                     title={tile.name}
                     className="flex h-3 w-4 items-center justify-center rounded-sm border border-white/70 text-[8px] font-bold leading-none text-slate-900 shadow-sm sm:h-3.5 sm:w-5"
-                    style={{ background: color }}
+                    style={{ background: color, opacity: state.mortgaged[t] ? 0.45 : 1 }}
                   >
-                    {state.houses[t] ? (state.houses[t] === 5 ? "H" : state.houses[t]) : ""}
+                    {state.mortgaged[t] ? "G" : state.houses[t] ? (state.houses[t] === 5 ? "H" : state.houses[t]) : ""}
                   </span>
                 );
               })}

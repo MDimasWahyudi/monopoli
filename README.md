@@ -1,7 +1,7 @@
 # Monopoli Nusantara
 
 Game monopoli sederhana bertema kota-kota Indonesia (Next.js + TypeScript + Tailwind).
-MVP saat ini: mode hot-seat 2–4 pemain dalam satu perangkat, lengkap dengan rumah & hotel.
+MVP saat ini: mode hot-seat 2–4 pemain dalam satu perangkat, lengkap dengan rumah & hotel, gadai, dan trading.
 
 ```bash
 npm install

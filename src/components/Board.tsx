@@ -64,6 +64,7 @@ export default function Board({
                     row={row}
                     col={col}
                     owner={ownerId === undefined ? undefined : state.players[ownerId]}
+                    mortgaged={!!state.mortgaged[i]}
                     active={!current.bankrupt && positions[current.id] === i && state.phase !== "over"}
                   />
                 );
